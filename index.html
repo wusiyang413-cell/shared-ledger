@@ -189,7 +189,7 @@ function bindEvents(){
   if(customCnt)customCnt.addEventListener('input',updateCalcCustom);
 
   var addCustom=document.getElementById('addCustom');
-  if(addCustom)addCustom.addEventListener('click',function(){
+  if(addCustom)addEventListener('click',function(){
     var a=parseFloat(customAmt.value);
     var c=Math.max(1,parseInt(customCnt.value)||1);
     if(!a||a<=0){alert('\u8bf7\u586b\u5199\u6709\u6548\u7684\u4eba\u5747\u91d1\u989d');customAmt.focus();return;}
@@ -229,7 +229,7 @@ function bindEvents(){
       await loadState();
       alert('\u6263\u8d26\u6210\u529f\uff01');
     }catch(err){
-      alert('\u9519\u8bef: '+err.message);
+      alert('\u9519\ubef: '+err.message);
     }
     sBtn.disabled=false;sBtn.textContent='\u786e\u8ba4\u6263\u8d26';
   });
@@ -265,7 +265,7 @@ async function doTopup(amount){
     await loadState();
     alert('\u5145\u503c\u6210\u529f! '+fmt(amount));
   }catch(err){
-    alert('\u9519\u8bef: '+err.message);
+    alert('\u9519\ubef: '+err.message);
   }
 }
 
@@ -275,22 +275,19 @@ async function loadState(){
     if(!r.ok)throw new Error('HTTP '+r.status);
     state=await r.json();
     syncErrCount=0;
-    updateSyncDot(true);
   }catch(e){
     console.error('loadState:',e);
     syncErrCount++;
-    updateSyncDot(false);
     if(!state){
       state={balance:INITIAL,used:0,initial:INITIAL,entries:[],version:0};
     }
   }
   render();
-  if(syncErrCount>0){
+  /* render执行后DOM已存在，此时更新同步状态显示 */
+  if(syncErrCount > 0){
     var ss=document.getElementById('syncStatus');
-    if(ss)ss.innerHTML='<span class="sync-dot off"></span>\u672a\u8fde\u63a5\u5230\u670d\u52a1\u5668(\u68c0\u67e5\u73af\u5883\u53d8\u91cf)';
+    if(ss) ss.innerHTML='<span class="sync-dot off"></span>\u672a\u8fde\u63a5\u5230\u670d\u52a1\u5668';
   }
-  }
-  render();
 }
 
 function updateSyncDot(ok){
