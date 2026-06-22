@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
+<title>共享账本</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#f0f2f5;font-family:-apple-system,system-ui,sans-serif; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+input,select,textarea{font-size:16px!important}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.card{background:linear-gradient(135deg,#11998e,#38ef7d);border-radius:20px;color:#fff;padding:24px 20px;position:relative;overflow:hidden}
+.card::after{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.12)}
+.entry-item{animation:slideIn .25s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:translateX(0)}}
+.sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.sync-dot.on{background:#38ef7d;box-shadow:0 0 6px #38ef7d}
+.sync-dot.off{background:#999}
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e8e8e8;padding:14px 16px;z-index:50;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+body{padding-bottom:110px}
+
+.quick-row{background:#fff;border-radius:14px;padding:12px 14px;border:2px solid #e8e8ed;display:flex;align-items:center;gap:8px;margin-bottom:10px;transition:border-color .2s}
+.quick-row:focus-within{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.10)}
+.preset-badge{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;white-space:nowrap;cursor:pointer;border:none;user-select:none;touch-action:manipulation;min-width:80px;text-align:center;transition:transform .1s}
+.preset-badge:active{transform:scale(.95)}
+.input-cnt{width:58px;border:2px solid #e0e0e0;border-radius:10px;padding:10px 4px;font-size:17px!important;font-weight:700;text-align:center;outline:none;background:#fafafa}
+.input-cnt:focus{border-color:#667eea;background:#fff}
+.input-amt{flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px!important;outline:none;min-width:0;background:#fafafa}
+.input-amt:focus{border-color:#667eea;background:#fff}
+.calc-result{font-size:18px;font-weight:800;color:#667eea;white-space:nowrap;min-width:56px;text-align:right}
+.btn-add{background:linear-gradient(135deg,#11998e,#38ef7d);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;touch-action:manipulation;transition:transform .1s}
+.btn-add:active{transform:scale(.93)}
+.row-label{color:#888;font-size:13px;font-weight:600;white-space:nowrap}
+</style>
+</head>
+<body class="max-w-md mx-auto">
+<div id="app"></div>
+
+<script>
+var INITIAL = 10000;
+var API = '/api';
+var state = null;
+var selected = [];
+var syncErrCount = 0;
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function fmt(n){return '\u00a5'+Number(n).toLocaleString('zh-CN')}
+function vibrate(){if(navigator.vibrate)navigator.vibrate(12)}
+
+function render(){
+  var app=document.getElementById('app');
+  var pct=(state&&state.initial)?Math.round((state.used/state.initial)*100):0;
+  var totalSel=selected.reduce(function(s,i){return s+i.amount},0);
+
+  app.innerHTML=
+  '<div style="padding:16px 16px 8px">'+
+    /* 余额卡片 */
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div>'+
+          '<div style="font-size:13px;opacity:.85;margin-bottom:4px">\u5f53\u524d\u4f59\u989d</div>'+
+          '<div style="font-size:42px;font-weight:800;letter-spacing:-1px">'+(state?fmt(state.balance):'\u2014\u2014')+'</div>'+
+        '</div>'+
+        '<button id="topupBtn" style="background:rgba(255,255,255,.22);border:1.5px solid rgba(255,255,255,.45);border-radius:10px;padding:7px 13px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">\u2b06 \u5145\u503c</button>'+
+      '</div>'+
+      '<div style="margin-top:14px;background:rgba(255,255,255,.3);border-radius:6px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:rgba(255,255,255,.7);border-radius:6px;transition:width .4s"></div></div>'+
+      '<div style="font-size:12px;margin-top:6px;display:flex;justify-content:space-between;opacity:.8"><span>\u5df2\u7528 '+(state?fmt(state.used):'\u2014\u2014')+' / '+(state?fmt(state.initial):fmt(INITIAL))+'</span><span>'+pct+'%</span></div>'+
+    '</div>'+
+
+    /* ===== 快速扣账区 ===== */
+    '<div style="margin-top:18px">'+
+      '<div style="font-size:15px;font-weight:700;color:#333;margin-bottom:10px">\u5feb\u901f\u6263\u8d26</div>'+
+
+      /* 第1行：25元/人 预设 */
+      '<div class="quick-row">'+
+        '<button class="preset-badge">\u25 \u5143/\u4eba</button>'+
+        '<span style="font-size:15px;color:#bbb;font-weight:700">\u00d7</span>'+
+        '<input type="number" id="cnt25" class="input-cnt" value="1" min="1" />'+
+        '<span class="calc-result" id="calc25">\u00a525</span>'+
+        '<button class="btn-add" id="add25">\u6dfb\u52a0</button>'+
+      '</div>'+
+
+      /* 第2行：自定义人均 */
+      '<div class="quick-row">'+
+        '<span class="row-label">\u4eba\u5747:</span>'+
+        '<input type="number" id="customAmt" class="input-amt" placeholder="\u586b\u5199\u4eba\u5747\u91d1\u989d" step="0.01" min="0" />'+
+        '<span style="font-size:15px;color:#bbb;font-weight:700">\u00d7</span>'+
+        '<input type="number" id="customCnt" class="input-cnt" value="1" min="1" />'+
+        '<span class="calc-result" id="calcCustom" style="color:#bbb">\u00a50</span>'+
+        '<button class="btn-add" id="addCustom" style="background:linear-gradient(135deg,#f093fb,#f5576c)">\u6dfb\u52a0</button>'+
+      '</div>'+
+    '</div>'+
+
+    /* 操作人 + 备注 */
+    '<div style="margin-top:14px;display:flex;gap:8px;align-items:center">'+
+      '<input type="text" id="whoInput" placeholder="\u64cd\u4f5c\u4eba\u59d3\u540d\uff08\u5fc5\u586b\uff09" style="flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
+      '<button id="clearSel" style="padding:8px 14px;border:2px solid #e0e0e0;border-radius:10px;background:#fff;cursor:pointer;font-weight:600;color:#888;font-size:13px">\u6e05\u7a7a</button>'+
+    '</div>'+
+
+    '<input type="text" id="noteInput" placeholder="\u5907\u6ce8\uff08\u9009\u586b\uff09" style="margin-top:8px;width:100%;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
+
+    /* 本次合计 */
+    '<div style="margin-top:14px;background:#fff8e1;border:2px solid #ffd54f;border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center">'+
+      '<div>'+
+        '<span style="font-weight:700;color:#e65100;font-size:15px">\u672c\u6b21\u5408\u8ba1</span>'+
+        (selected.length>0
+          ?'<div style="font-size:11px;color:#c88800;margin-top:2px">'+selected.map(function(s){return s.perPerson+'\u00d7'+s.people+'\u4eba'}).join(' | ')+'</div>'
+          :'')+
+      '</div>'+
+      '<span style="font-size:26px;font-weight:800;color:#e65100">'+(totalSel>0?fmt(totalSel):'\u00a50')+'</span>'+
+    '</div>'+
+  '</div>'+
+
+  /* 流水记录 */
+  '<div style="padding:8px 16px 140px">'+
+    '<div style="font-size:15px;font-weight:700;color:#333;margin:10px 0 8px;display:flex;align-items:center;justify-content:space-between">'+
+      '<span>\u6d41\u6c34\u8bb0\u5f55</span>'+
+      '<span id="syncStatus" style="font-size:12px;font-weight:400;color:#999"><span class="sync-dot on"></span>\u540c\u6b65\u4e2d</span>'+
+    '</div>'+
+    '<div id="entries">'+
+      ((state&&state.entries?state.entries:[]).length===0
+        ?'<div style="text-align:center;padding:40px 0;color:#bbb;font-size:14px">\u6682\u65e0\u8bb0\u5f55</div>'
+        : (state.entries||[]).slice().reverse().map(function(e){
+            return '<div class="entry-item" style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid #eee'+
+              ((e.note==='\u5145\u503c')?'border-left:4px solid #11998e':'')+
+              '">'+
+              '<div style="display:flex;justify-content:space-between;align-items:center">'+
+                '<div>'+
+                  '<span style="font-weight:700;font-size:16px;color:'+(e.note==='\u5145\u503c'?'#11998e':'#c62828)+'">'+(e.note==='\u5145\u503c'?'+':'-')+esc(e.note||'\u6d88\u8d39')+'</span>'+
+                  '<span style="margin-left:6px;font-size:13px;color:#888">| '+esc(e.person)+' | '+e.perPerson+'\u5143/\u4eba \u00d7'+e.people+'\u4eba</span>'+
+                '</div>'+
+                '<span style="font-weight:800;font-size:17px;color:'+(e.note==='\u5145\u503c'?'#11998e':'#c62828)+'">'+(e.note==='\u5145\u503c'?'+':'')+fmt(e.amount)+'</span>'+
+              '</div>'+
+              '<div style="font-size:12px;color:#aaa;margin-top:5px">'+new Date(e.time).toLocaleString('zh-CN')+' \u00b7 \u4f59\u989d '+fmt(e.balanceAfter)+'</div>'+
+            '</div>';
+          }).join('')
+      )+
+    '</div>'+
+  '</div>'+
+
+  /* 底部操作栏 */
+  '<div class="bottom-bar" style="max-width:512px;left:50%;transform:translateX(-50%)">'+
+    '<div style="display:flex;gap:10px;align-items:center">'+
+      '<button id="submitBtn" style="flex:1;background:linear-gradient(135deg,#ff6b6b,#ee0979);color:#fff;border:none;border-radius:14px;padding:15px;font-size:18px;font-weight:800;cursor:pointer;letter-spacing:2px"'+
+        (selected.length===0?' disabled style="opacity:.45;cursor:not-allowed"':'')+
+        '>\u786e\u8ba4\u6263\u8d26</button>'+
+      '<button id="resetBtn" title="\u91cd\u7f6e\u6240\u6709\u6570\u636e" style="background:#fff;border:2px solid #ffcdd2;border-radius:14px;padding:14px 16px;cursor:pointer;font-weight:700;color:#e57373;font-size:14px;white-space:nowrap">\u91cd\u7f6e</button>'+
+    '</div>'+
+  '</div>';
+
+  bindEvents();
+}
+
+function bindEvents(){
+  /* === 第1行：25元/人 预设 === */
+  var cnt25=document.getElementById('cnt25');
+  var calc25=document.getElementById('calc25');
+  function updateCalc25(){
+    var n=Math.max(1,parseInt(cnt25.value)||0);
+    calc25.textContent='\u00a5'+(25*n);
+  }
+  if(cnt25)cnt25.addEventListener('input',updateCalc25);
+
+  var add25=document.getElementById('add25');
+  if(add25)add25.addEventListener('click',function(){
+    vibrate();
+    var n=Math.max(1,parseInt(cnt25.value)||1);
+    selected.push({perPerson:25,people:n,amount:25*n});
+    cnt25.value='1';
+    updateCalc25();
+    render();
+  });
+
+  /* === 第2行：自定义人均 === */
+  var customAmt=document.getElementById('customAmt');
+  var customCnt=document.getElementById('customCnt');
+  var calcCustom=document.getElementById('calcCustom');
+
+  function updateCalcCustom(){
+    var a=parseFloat(customAmt.value)||0;
+    var c=Math.max(1,parseInt(customCnt.value)||0);
+    var total=a*c;
+    calcCustom.textContent='\u00a5'+total;
+    calcCustom.style.color=total>0?'#667eea':'#bbb';
+  }
+
+  if(customAmt)customAmt.addEventListener('input',updateCalcCustom);
+  if(customCnt)customCnt.addEventListener('input',updateCalcCustom);
+
+  var addCustom=document.getElementById('addCustom');
+  if(addCustom)addCustom.addEventListener('click',function(){
+    var a=parseFloat(customAmt.value);
+    var c=Math.max(1,parseInt(customCnt.value)||1);
+    if(!a||a<=0){alert('\u8bf7\u586b\u5199\u6709\u6548\u7684\u4eba\u5747\u91d1\u989d');customAmt.focus();return;}
+    vibrate();
+    selected.push({perPerson:a,people:c,amount:a*c});
+    customAmt.value='';
+    customCnt.value='1';
+    updateCalcCustom();
+    render();
+  });
+
+  /* 回车快捷提交自定义行 */
+  if(customAmt)customAmt.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addCustom&&addCustom.click();}});
+  if(customCnt)customCnt.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addCustom&&addCustom.click();}});
+
+  /* === 清空已选 === */
+  var cS=document.getElementById('clearSel');
+  if(cS)cS.addEventListener('click',function(){selected=[];render();});
+
+  /* === 确认扣账 === */
+  var sBtn=document.getElementById('submitBtn');
+  if(sBtn)sBtn.addEventListener('click',async function(){
+    var who=(document.getElementById('whoInput').value||'').trim();
+    if(!who){alert('\u8bf7\u586b\u5199\u64cd\u4f5c\u4eba\u59d3\u540d');document.getElementById('whoInput').focus();return;}
+    if(!selected.length){alert('\u8bf7\u5148\u9009\u62e9\u6216\u8f93\u5165\u6d88\u8d39\u9879');return;}
+    sBtn.disabled=true;sBtn.textContent='\u63d0\u4ea4\u4e2d...';
+    try{
+      for(var i=0;i<selected.length;i++){
+        var item=selected[i];
+        var r=await fetch(API+'/charge',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({perPerson:item.perPerson,people:item.people,person:who,note:(document.getElementById('noteInput').value||'').trim()})});
+        if(!r.ok){var e=await r.json();throw new Error(e.error||'\u6263\u8d26\u5931\u8d25');}
+      }
+      selected=[];
+      document.getElementById('whoInput').value='';
+      document.getElementById('noteInput').value='';
+      await loadState();
+      alert('\u6263\u8d26\u6210\u529f\uff01');
+    }catch(err){
+      alert('\u9519\u8bef: '+err.message);
+    }
+    sBtn.disabled=false;sBtn.textContent='\u786e\u8ba4\u6263\u8d26';
+  });
+
+  /* === 重置 === */
+  var rBtn=document.getElementById('resetBtn');
+  if(rBtn)rBtn.addEventListener('click',async function(){
+    if(!confirm('\u786e\u5b9a\u8981\u91cd\u7f6e\u6240\u6709\u6570\u636e\u5417\uff1f'))return;
+    try{await fetch(API+'/reset',{method:'POST'});selected=[];await loadState();}
+    catch(e){alert('\u91cd\u7f6e\u5931\u8d25:'+e.message)}
+  });
+
+  /* === 充值按钮 === */
+  var tBtn=document.getElementById('topupBtn');
+  if(tBtn)tBtn.addEventListener('click',function(){
+    var amt=prompt('\u8f93\u5165\u5145\u503c\u91d1\u989d(\u5143)\n\n\u5f53\u524d\u4f59\u989d: '+(state?fmt(state.balance):'\u2014\u2014')+'\n\u5145\u503c\u540e\u4f59\u989d = \u5f53\u524d + \u586b\u5195\u7684\u91d1\u989d','');
+    if(!amt)return;
+    var n=parseFloat(amt);
+    if(isNaN(n)||n<=0){alert('\u8bf7\u8f93\u5165\u6700\u6548\u7684\u91d1\u989d');return;}
+    doTopup(n);
+  });
+
+  /* 回车快捷提交 */
+  var whoEl=document.getElementById('whoInput');
+  if(whoEl)whoEl.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();sBtn&&sBtn.click();}});
+}
+
+/* 充值操作 */
+async function doTopup(amount){
+  try{
+    var r=await fetch(API+'/topup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount:amount})});
+    if(!r.ok){var e=await r.json();throw new Error(e.error||'\u5145\u503c\u5931\u8d25');}
+    await loadState();
+    alert('\u5145\u503c\u6210\u529f! '+fmt(amount));
+  }catch(err){
+    alert('\u9519\u8bef: '+err.message);
+  }
+}
+
+async function loadState(){
+  try{
+    var r=await fetch(API+'/state');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    state=await r.json();
+    syncErrCount=0;
+    updateSyncDot(true);
+  }catch(e){
+    console.error('loadState:',e);
+    syncErrCount++;
+    updateSyncDot(false);
+    if(!state){
+      state={balance:INITIAL,used:0,initial:INITIAL,entries:[],version:0};
+    }
+  }
+  render();
+  if(syncErrCount>0){
+    var ss=document.getElementById('syncStatus');
+    if(ss)ss.innerHTML='<span class="sync-dot off"></span>\u672a\u8fde\u63a5\u5230\u670d\u52a1\u5668(\u68c0\u67e5\u73af\u5883\u53d8\u91cf)';
+  }
+  }
+  render();
+}
+
+function updateSyncDot(ok){
+  var el=document.getElementById('syncStatus');
+  if(el)el.innerHTML='<span class="sync-dot '+(ok?'on':'off')+'"></span>'+(ok?'\u540c\u6b65\u4e2d':'\u8fde\u63a5\u65ad\u5f00('+syncErrCount+')');
+}
+
+loadState();
+setInterval(function(){if(syncErrCount<3)loadState()},5000);
+</script>
+</body>
+</html>
