@@ -7,11 +7,9 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:#f0f2f5;font-family:-apple-system,system-ui,sans-serif; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+body{background:#f0f2f5;font-family:-apple-system,system-ui,sans-serif;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 input,select,textarea{font-size:16px!important}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-.btn-quick{transition:transform .1s,box-shadow .1s;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 10px;font-size:15px;font-weight:600;text-align:center;cursor:pointer;border:none;user-select:none;touch-action:manipulation}
-.btn-quick:active{transform:scale(.95);box-shadow:0 2px 8px rgba(102,126,234,.4)}
 .card{background:linear-gradient(135deg,#11998e,#38ef7d);border-radius:20px;color:#fff;padding:24px 20px;position:relative;overflow:hidden}
 .card::after{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.12)}
 .entry-item{animation:slideIn .25s ease-out}
@@ -21,6 +19,19 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .sync-dot.off{background:#999}
 .bottom-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e8e8e8;padding:14px 16px;z-index:50;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
 body{padding-bottom:110px}
+.quick-row{background:#fff;border-radius:14px;padding:14px 16px;border:2px solid #e8e8ed;display:flex;align-items:center;gap:10px;margin-bottom:10px;transition:border-color .2s}
+.quick-row:focus-within{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.12)}
+.preset-badge{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:800;white-space:nowrap;cursor:pointer;border:none;user-select:none;touch-action:manipulation;min-width:88px;text-align:center;transition:transform .1s}
+.preset-badge:active{transform:scale(.95)}
+.preset-badge.active{background:linear-gradient(135deg,#ff6b6b,#ee0979);box-shadow:0 2px 8px rgba(238,9,121,.35)}
+.input-cnt{width:64px;border:2px solid #e0e0e0;border-radius:10px;padding:10px 6px;font-size:17px!important;font-weight:700;text-align:center;outline:none;transition:border-color .2s;background:#fafafa}
+.input-cnt:focus{border-color:#667eea;background:#fff}
+.input-amt{flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px!important;outline:none;min-width:0;background:#fafafa}
+.input-amt:focus{border-color:#667eea;background:#fff}
+.calc-result{font-size:18px;font-weight:800;color:#667eea;white-space:nowrap;min-width:60px;text-align:right}
+.btn-add{background:linear-gradient(135deg,#11998e,#38ef7d);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;touch-action:manipulation;transition:transform .1s}
+.btn-add:active{transform:scale(.93);box-shadow:0 2px 6px rgba(56,239,125,.35)}
+.row-label{color:#888;font-size:13px;font-weight:600;white-space:nowrap;min-width:36px}
 </style>
 </head>
 <body class="max-w-md mx-auto">
@@ -34,7 +45,7 @@ var selected = [];
 var syncErrCount = 0;
 
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
-function fmt(n){return '\u00a5'+Number(n).toLocaleString('zh-CN')}
+function fmt(n){return '¥'+Number(n).toLocaleString('zh-CN')}
 function vibrate(){if(navigator.vibrate)navigator.vibrate(12)}
 
 function render(){
@@ -45,77 +56,84 @@ function render(){
   app.innerHTML=
   '<div style="padding:16px 16px 8px">'+
     '<div class="card">'+
-      '<div style="font-size:13px;opacity:.85;margin-bottom:6px">\u5f53\u524d\u4f59\u989d</div>'+
-      '<div style="font-size:42px;font-weight:800;letter-spacing:-1px">'+(state?fmt(state.balance):'\u2014\u2014')+'</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="font-size:13px;opacity:.85;margin-bottom:6px">当前余额 · <span id="syncStatus" style="font-size:11px;opacity:.7"><span class="sync-dot on"></span>同步中</span></div>'+
+        '<button id="topupBtn" style="background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.5);color:#fff;font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;touch-action:manipulation">↑ 充值</button>'+
+      '</div>'+
+      '<div style="font-size:42px;font-weight:800;letter-spacing:-1px">'+(state?fmt(state.balance):'——')+'</div>'+
       '<div style="margin-top:14px;background:rgba(255,255,255,.3);border-radius:6px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:rgba(255,255,255,.7);border-radius:6px;transition:width .4s"></div></div>'+
-      '<div style="font-size:12px;margin-top:6px;display:flex;justify-content:space-between;opacity:.8"><span>\u5df2\u7528 '+(state?fmt(state.used):'\u2014\u2014')+' / '+fmt(INITIAL)+'</span><span>'+pct+'%</span></div>'+
-    '</div>'+
+      '<div style="font-size:12px;margin-top:6px;display:flex;justify-content:space-between;opacity:.8"><span>已用 '+fmt(state?state.used:'0')+' / '+fmt(state?state.initial:INITIAL)+'</span><span>'+pct+'%</span></div>'+
+    '</div>'`
 
+    /* 快速扣账区 */
     '<div style="margin-top:18px">'+
-      '<div style="font-size:15px;font-weight:700;color:#333;margin-bottom:10px">\u5feb\u901f\u6263\u8d26</div>'+
-      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px" id="btns">'+
-        [[25,1],[25,2],[25,3],[18,1],[18,2],[18,3]].map(function(pair){
-          var p=pair[0],n=pair[1];
-          return '<button class="btn-quick" data-p="'+p+'" data-n="'+n+'">'+
-            '<div style="font-size:19px;font-weight:800">'+p+'\u5143/\u4eba</div>'+
-            '<div style="font-size:12px;opacity:.75;margin-top:3px">\u00d7'+n+'\u4eba</div>'+
-          '</button>';
-        }).join('')+
+      '<div style="font-size:15px;font-weight:700;color:#333;margin-bottom:10px">快速扣账</div>'+
+      '<div class="quick-row">'+
+        '<button class="preset-badge active" id="preset25">25 元/人</button>'+
+        '<span style="font-size:13px;color:#aaa;font-weight:600">×</span>'+
+        '<input type="number" id="cnt25" class="input-cnt" value="1" min="1" placeholder="人数" />'+
+        '<span class="calc-result" id="calc25">¥25</span>'+
+        '<button class="btn-add" id="add25">添加</button>'+
       '</div>'+
-    '</div>'+
-
-    '<details style="margin-top:14px">'+
-      '<summary style="font-size:14px;font-weight:600;color:#555;cursor:pointer;padding:6px 0">\u81ea\u5b9a\u4e49\u91d1\u989d \u25bc</summary>'+
-      '<div style="margin-top:10px;display:flex;gap:8px;align-items:center">'+
-        '<input type="number" id="customAmt" placeholder="\u91d1\u989d" step="0.01" min="0" style="flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
-        '<input type="number" id="customCnt" placeholder="\u4eba\u6570" value="1" min="1" style="width:72px;border:2px solid #e0e0e0;border-radius:10px;padding:10px 8px;font-size:16px;outline:none;text-align:center" />'+
-        '<button id="customBtn" style="background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:700;white-space:nowrap;cursor:pointer">\u6dfb\u52a0</button>'+
+      '<div class="quick-row">'+
+        '<span class="row-label">人均:</span>'+
+        '<input type="number" id="customAmt" class="input-amt" placeholder="填人均金额" step="0.01" min="0" />'+
+        '<span style="font-size:13px;color:#aaa;font-weight:600">×</span>'+
+        '<input type="number" id="customCnt" class="input-cnt" value="1" min="1" placeholder="人数" />'+
+        '<span class="calc-result" id="calcCustom">¥0</span>'+
+        '<button class="btn-add" id="addCustom" style="background:linear-gradient(135deg,#e91e63,#ff6b6b)">添加</button>'+
       '</div>'+
-    '</details>'+
+    '</div>'`
 
+    /* 操作人 + 备注 + 本次合计 */
     '<div style="margin-top:14px;display:flex;gap:8px;align-items:center">'+
-      '<input type="text" id="whoInput" placeholder="\u64cd\u4f5c\u4eba\u59d3\u540d\uff08\u5fc5\u586b\uff09" style="flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
-      '<button id="clearSel" style="padding:8px 14px;border:2px solid #e0e0e0;border-radius:10px;background:#fff;cursor:pointer;font-weight:600;color:#888;font-size:13px">\u6e05\u7a7a</button>'+
+      '<input type="text" id="whoInput" placeholder="操作人姓名（必填）" style="flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
+      '<button id="clearSel" style="padding:8px 14px;border:2px solid #e0e0e0;border-radius:10px;background:#fff;cursor:pointer;font-weight:600;color:#888;font-size:13px">清空</button>'+
     '</div>'+
-
-    '<input type="text" id="noteInput" placeholder="\u5907\u6ce8\uff08\u9009\u586b\uff09" style="margin-top:8px;width:100%;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
-
+    '<input type="text" id="noteInput" placeholder="备注（选填）" style="margin-top:8px;width:100%;border:2px solid #e0e0e0;border-radius:10px;padding:10px 12px;font-size:16px;outline:none" />'+
     '<div style="margin-top:14px;background:#fff8e1;border:2px solid #ffd54f;border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center">'+
-      '<span style="font-weight:700;color:#e65100;font-size:15px">\u672c\u6b21\u5408\u8ba1</span>'+
-      '<span style="font-size:26px;font-weight:800;color:#e65100">'+(totalSel>0?fmt(totalSel):'\u00a50')+'</span>'+
+      '<div>'+
+        '<span style="font-weight:700;color:#e65100;font-size:15px">本次合计</span>'+
+        (selected.length>0
+          ?'<div style="font-size:11px;color:#c88800;margin-top:2px">'+selected.map(function(s){return esc(s.person||'?')+' '+s.perPerson+'元×'+s.people+'人'}).join(' | ')+'</div>'
+          :'')+
+      '</div>'+
+      '<span style="font-size:26px;font-weight:800;color:#e65100">'+(totalSel>0?fmt(totalSel):'¥0')+'</span>'+
     '</div>'+
-  '</div>'+
+  '</div>'`
 
+  /* 流水记录 */
   '<div style="padding:8px 16px 140px">'+
     '<div style="font-size:15px;font-weight:700;color:#333;margin:10px 0 8px;display:flex;align-items:center;justify-content:space-between">'+
-      '<span>\u6d41\u6c34\u8bb0\u5f55</span>'+
-      '<span id="syncStatus" style="font-size:12px;font-weight:400;color:#999"><span class="sync-dot on"></span>\u540c\u6b65\u4e2d</span>'+
+      '<span>流水记录</span>'+
     '</div>'+
     '<div id="entries">'+
       ((state&&state.entries?state.entries:[]).length===0
-        ?'<div style="text-align:center;padding:40px 0;color:#bbb;font-size:14px">\u6682\u65e0\u8bb0\u5f55</div>'
+        ?'<div style="text-align:center;padding:40px 0;color:#bbb;font-size:14px">暂无记录</div>'
         : (state.entries||[]).slice().reverse().map(function(e){
+            var isTopup = e.amount > 0 && e.note && e.note.indexOf('充值') !== -1;
             return '<div class="entry-item" style="background:#fff;border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid #eee">'+
               '<div style="display:flex;justify-content:space-between;align-items:center">'+
                 '<div>'+
-                  '<span style="font-weight:700;font-size:16px;color:#c62828">-'+esc(e.note||'\u6d88\u8d39')+'</span>'+
-                  '<span style="margin-left:6px;font-size:13px;color:#888">| '+esc(e.person)+' | '+e.perPerson+'\u5143/\u4eba \u00d7'+e.people+'\u4eba</span>'+
+                  '<span style="font-weight:700;font-size:16px;color:'+(isTopup?'#2e7d32':'#c62828')+'">'+(isTopup?'+ ':'- ')+esc(e.note||'消费')+'</span>'+
+                  '<span style="margin-left:6px;font-size:13px;color:#888">| '+esc(e.person)+' | '+e.perPerson+'元/人 ×'+e.people+'人</span>'+
                 '</div>'+
-                '<span style="font-weight:800;font-size:17px;color:#c62828">'+fmt(e.amount)+'</span>'+
+                '<span style="font-weight:800;font-size:17px;color:'+(isTopup?'#2e7d32':'#c62828')+'">'+(isTopup?'+':'-')+fmt(Math.abs(e.amount))+'</span>'+
               '</div>'+
-              '<div style="font-size:12px;color:#aaa;margin-top:5px">'+new Date(e.time).toLocaleString('zh-CN')+' \u00b7 \u4f59\u989d '+fmt(e.balanceAfter)+'</div>'+
+              '<div style="font-size:12px;color:#aaa;margin-top:5px">'+new Date(e.time).toLocaleString('zh-CN')+' · 余额 '+fmt(e.balanceAfter)+'</div>'+
             '</div>';
           }).join('')
       )+
     '</div>'+
-  '</div>'+
+  '</div>'`
 
+  /* 底部操作栏 */
   '<div class="bottom-bar" style="max-width:512px;left:50%;transform:translateX(-50%)">'+
     '<div style="display:flex;gap:10px;align-items:center">'+
       '<button id="submitBtn" style="flex:1;background:linear-gradient(135deg,#ff6b6b,#ee0979);color:#fff;border:none;border-radius:14px;padding:15px;font-size:18px;font-weight:800;cursor:pointer;letter-spacing:2px"'+
         (selected.length===0?' disabled style="opacity:.45;cursor:not-allowed"':'')+
-        '>\u786e\u8ba4\u6263\u8d26</button>'+
-      '<button id="resetBtn" title="\u91cd\u7f6e\u6240\u6709\u6570\u636e" style="background:#fff;border:2px solid #ffcdd2;border-radius:14px;padding:14px 16px;cursor:pointer;font-weight:700;color:#e57373;font-size:14px;white-space:nowrap">\u91cd\u7f6e</button>'+
+        '>确认扣账</button>'+
+      '<button id="resetBtn" title="重置所有数据" style="background:#fff;border:2px solid #ffcdd2;border-radius:14px;padding:14px 16px;cursor:pointer;font-weight:700;color:#e57373;font-size:14px;white-space:nowrap">重置</button>'+
     '</div>'+
   '</div>';
 
@@ -123,62 +141,105 @@ function render(){
 }
 
 function bindEvents(){
-  document.querySelectorAll('.btn-quick').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      vibrate();
-      var p=+btn.dataset.p,n=+btn.dataset.n;
-      selected.push({perPerson:p,people:n,amount:p*n});
-      render();
-    });
-  });
+  /* 25元/人 预设行 */
+  var cnt25=document.getElementById('cnt25');
+  var calc25=document.getElementById('calc25');
+  function updateCalc25(){var n=Math.max(1,parseInt(cnt25.value)||0);calc25.textContent='¥'+(25*n)}
+  if(cnt25){cnt25.addEventListener('input',updateCalc25);updateCalc25()}
 
-  var cBtn=document.getElementById('customBtn');
-  if(cBtn)cBtn.addEventListener('click',function(){
-    var a=+document.getElementById('customAmt').value,c=+document.getElementById('customCnt').value;
-    if(!a||!c||a<=0||c<=0){alert('\u8bf7\u8f93\u5165\u6709\u6548\u91d1\u989d\u548c\u4eba\u6570');return;}
+  var add25=document.getElementById('add25');
+  if(add25)add25.onclick=function(){
     vibrate();
-    selected.push({perPerson:a,people:c,amount:a*c});
-    document.getElementById('customAmt').value='';
-    document.getElementById('customCnt').value='1';
+    var n=Math.max(1,parseInt(cnt25.value)||1;
+    selected.push({perPerson:25,people:n,amount:25*n,person:''});
     render();
-  });
+  };
 
-  var cS=document.getElementById('clearSel');
-  if(cS)cS.addEventListener('click',function(){selected=[];render();});
+  /* 自定义人均行 */
+  var customAmt=document.getElementById('customAmt');
+  var customCnt=document.getElementById('customCnt');
+  var calcCustom=document.getElementById('calcCustom');
+  function updateCalcCustom(){
+    var amt=parseFloat(customAmt.value)||0;
+    var n=Math.max(1,parseInt(customCnt.value)||0;
+    calcCustom.textContent=amt>0?'¥'+(amt*n):'¥0';
+  }
+  if(customAmt)customAmt.addEventListener('input',updateCalcCustom);
+  if(customCnt)customCnt.addEventListener('input',updateCalcCustom);
+  updateCalcCustom();
 
-  var sBtn=document.getElementById('submitBtn');
-  if(sBtn)sBtn.addEventListener('click',async function(){
-    var who=(document.getElementById('whoInput').value||'').trim();
-    if(!who){alert('\u8bf7\u586b\u5199\u64cd\u4f5c\u4eba\u59d3\u540d');document.getElementById('whoInput').focus();return;}
-    if(!selected.length){alert('\u8bf7\u5148\u9009\u62e9\u6216\u8f93\u5165\u6d88\u8d39\u9879');return;}
-    sBtn.disabled=true;sBtn.textContent='\u63d0\u4ea4\u4e2d...';
-    try{
-      for(var i=0;i<selected.length;i++){
-        var item=selected[i];
-        var r=await fetch(API+'/charge',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({perPerson:item.perPerson,people:item.people,person:who,note:(document.getElementById('noteInput').value||'').trim()})});
-        if(!r.ok){var e=await r.json();throw new Error(e.error||'\u6263\u8d26\u5931\u8d25');}
-      }
-      selected=[];
-      document.getElementById('whoInput').value='';
-      document.getElementById('noteInput').value='';
-      await loadState();
-      alert('\u6263\u8d26\u6210\u529f\uff01');
-    }catch(err){
-      alert('\u9519\u8bef: '+err.message);
-    }
-    sBtn.disabled=false;sBtn.textContent='\u786e\u8ba4\u6263\u8d26';
-  });
+  var addCustom=document.getElementById('addCustom');
+  if(addCustom)addCustom.onclick=function(){
+    vibrate();
+    var amt=parseFloat(customAmt.value)||0;
+    if(amt<=0){alert('请填写人均金额');return}
+    var n=Math.max(1,parseInt(customCnt.value)||1;
+    selected.push({perPerson:amt,people:n,amount:amt*n,person:''});
+    customAmt.value='';customCnt.value='1';updateCalcCustom();render();
+  };
 
-  var rBtn=document.getElementById('resetBtn');
-  if(rBtn)rBtn.addEventListener('click',async function(){
-    if(!confirm('\u786e\u5b9a\u8981\u91cd\u7f6e\u6240\u6709\u6570\u636e\u5417\uff1f\u4f59\u989d\u5c06\u6062\u590d\u5230 \u00a5'+INITIAL.toLocaleString()))return;
-    try{await fetch(API+'/reset',{method:'POST'});selected=[];await loadState();}
-    catch(e){alert('\u91cd\u7f6e\u5931\u8d25:'+e.message)}
-  });
+  /* 清空 */
+  var clearSel=document.getElementById('clearSel');
+  if(clearSel)clearSel.onclick=function(){vibrate();selected=[];render()};
 
-  var whoEl=document.getElementById('whoInput');
-  if(whoEl)whoEl.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();sBtn&&sBtn.click();}});
+  /* 充值按钮 */
+  var topupBtn=document.getElementById('topupBtn');
+  if(topupBtn)topupBtn.onclick=function(){
+    vibrate();
+    var amt=prompt('请输入充值金额（元）：');
+    if(amt===null)return;
+    var n=parseFloat(amt);
+    if(isNaN(n)||n<=0){alert('请输入有效金额');return}
+    var who=(document.getElementById('whoInput')||{}).value||'未知';
+    var note=(document.getElementById('noteInput')||{}).value||'';
+    var btn=topupBtn;btn.disabled=true;btn.textContent='处理中...';
+    fetch(API+'/topup',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({amount:n,person:who,note:note})
+    }).then(function(r){return r.json()}).then(function(d){
+      if(d.ok){state=d.state;selected=[];render();syncErrCount=0;updateSyncDot(true)}
+      else alert('充值失败：'+(d.error||'未知错误'));
+    }).catch(function(e){alert('网络错误，请重试')}).finally(function(){btn.disabled=false;btn.textContent='↑ 充值'});
+  };
+
+  /* 确认扣账 */
+  var submitBtn=document.getElementById('submitBtn');
+  if(submitBtn)submitBtn.onclick=function(){
+    vibrate();
+    if(selected.length===0)return;
+    var who=(document.getElementById('whoInput')||{}).value.trim();
+    if(!who){alert('请填写操作人姓名');return}
+    var note=(document.getElementById('noteInput')||{}).value.trim();
+    var entries=selected.map(function(s){return{perPerson:s.perPerson,people:s.people,amount:s.amount,person:who,note:note}});
+    submitBtn.disabled=true;submitBtn.textContent='处理中...';
+    fetch(API+'/charge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:entries,person:who})})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.ok){state=d.state;selected=[];if(document.getElementById('whoInput'))document.getElementById('whoInput').value='';if(document.getElementById('noteInput'))document.getElementById('noteInput').value='';render();syncErrCount=0;updateSyncDot(true)}
+        else alert('扣账失败：'+(d.error||'未知错误'));
+      }).catch(function(e){alert('网络错误，请重试')}).finally(function(){submitBtn.disabled=false;submitBtn.textContent='确认扣账'});
+  };
+
+  /* 重置 */
+  var resetBtn=document.getElementById('resetBtn');
+  if(resetBtn)resetBtn.onclick=function(){
+    vibrate();
+    if(!confirm('确定要重置所有数据吗？此操作不可恢复！'))return;
+    resetBtn.disabled=true;resetBtn.textContent='处理中...';
+    fetch(API+'/reset',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+      if(d.ok){state=d.state;selected=[];render();syncErrCount=0;updateSyncDot(true)}
+      else alert('重置失败：'+(d.error||'未知错误'));
+    }).catch(function(e){alert('网络错误，请重试')}).finally(function(){resetBtn.disabled=false;resetBtn.textContent='重置'});
+  };
+}
+
+function updateSyncDot(ok){
+  syncErrCount=ok?0:syncErrCount+1;
+  var el=document.getElementById('syncStatus');
+  if(!el)return;
+  if(syncErrCount>=3){
+    el.innerHTML='<span class="sync-dot off"></span>未连接';
+  }else{
+    el.innerHTML='<span class="sync-dot on"></span>同步中';
+  }
 }
 
 async function loadState(){
@@ -193,16 +254,15 @@ async function loadState(){
     console.error('loadState:',e);
     syncErrCount++;
     updateSyncDot(false);
+    /* 即使API失败也渲染默认界面 */
+    if(!state)state={balance:0,used:0,initial:INITIAL,entries:[]};
+    render();
   }
 }
 
-function updateSyncDot(ok){
-  var el=document.getElementById('syncStatus');
-  if(el)el.innerHTML='<span class="sync-dot '+(ok?'on':'off')+'"></span>'+(ok?'\u540c\u6b65\u4e2d':'\u8fde\u63a5\u65ad\u5f00('+syncErrCount+')');
-}
-
+/* 初始加载 + 定时同步 */
 loadState();
-setInterval(function(){if(syncErrCount<3)loadState()},5000);
+setInterval(function(){loadState()},3000);
 </script>
 </body>
 </html>
