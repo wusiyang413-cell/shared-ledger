@@ -1,1 +1,1 @@
-{"name": "shared-ledger", "version": "3.0.0", "description": "共享账本 - 餐厅充值消费实时记账 (Vercel单文件版)", "dependencies": {"@upstash/redis": "^1.34.0"}}
+{"name": "shared-ledger", "version": "4.0.0", "description": "共享账本 - 餐厅充值消费实时记账 (Vercel v4 CommonJS版)", "dependencies": {"@upstash/redis": "^1.34.0"}}
